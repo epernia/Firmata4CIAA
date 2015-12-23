@@ -1,0 +1,113 @@
+/* Copyright 2015, Ian Olivieri <ianolivieri93@gmail.com>
+ * All rights reserved.
+ *
+ * This file is part of the Firmata4CIAA program.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its
+ *    contributors may be used to endorse or promote products derived from this
+ *    software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+
+/** \brief Short description of this file
+ **
+ ** Long description of this file
+ **
+ **/
+
+/** \addtogroup Firmata4CIAA Firmata4CIAA
+ ** @{ */
+/** \addtogroup Firmata4CIAA
+ ** @{ */
+
+/* Ultima modificación: 28/9/15
+ * 24/9/15: agregado pwm y se puede cambiar de modo entre input y output.
+ * 28/9/15: cambiada la estructura de mapeo de pines para agregar pwm. Checkeado PWM en snap cambiando de funcion en cada pin.
+ * 2/10/15: Completado el manejo de PWM y variando valores probado en el firmata test.
+ * 5/10/15: Agregado el modo servo, salvo por la diferencia de frecuencia (1khz en pwm y 50hz en servo)
+ * 19/10/15 Arreglando el problema de frecuencias en modo servo con timer 1. Se usa el SCT para el PWM y timer1 para SERVO
+ * 22/10/15 Servo implementado. Solo 4 servos fueron implementados debido a que se actualizan dentro de una interrupcion y agregar mas baja el desempeño del sistema notablemente
+ * 26/10/15 Mejorado la funcion servo aumentando el tiempo entre ticks (de 1uSec a (aprox)11,11uSec), pudiendo
+ agregar mas pines con funcion de servo sin bajar el desempeño (8 en total).
+ * 29/10/15 Cambiada la implementacion de la funcion servo. Ahora se usan los timers para generar las ondas, no como base de tiempo.
+ El inconveniente es que como cada timer tiene solo 4 valores de comparacion, puedo generar 3 servos distintos por timer
+ (el 4º valor es para reiniciar la onda). Fueron utilizados 2 timers, por lo que por ahora hay 6 servos funcionando a 49.9995Hz
+ * 2~16/11/15 Modularizado el timer, la funcion de compare match. Empezado a modularizar el Servo.
+ * 16/12/15 Modificada la modularizacion del timer para hacerlo mas amigable. Re-Comienzo (y casi final) de la modularizacion del servo
+ * 17/12/15 Modularizado del servo completo. Se comienza a modularizar el SCT (que irá dentro del modulo del timer)
+ */
+
+/*==================[inclusions]=============================================*/
+
+#include "main.h"
+#include "UART_DRIVER.h"
+#include "HAL.h"
+#include "FIRMATA.h"
+#include "SERVO_DRIVER.h"
+
+/*==================[macros and definitions]=================================*/
+
+/*==================[internal data declaration]==============================*/
+
+/*==================[internal functions declaration]=========================*/
+int main( void );
+/*==================[internal data definition]===============================*/
+
+/*==================[external data definition]===============================*/
+
+/*==================[internal functions definition]==========================*/
+
+/*==================[external functions definition]==========================*/
+
+int main(void)
+{
+	/*---------Initialization---------*/
+	HAL_Init();
+	UART_DRIVER_Init();
+
+	/*----------Task creation---------*/
+
+	xTaskCreate( FIRMATA_UpdateTask, "FIRMATAupdate", 240, NULL, 4, NULL );
+	xTaskCreate( FIRMATA_InputsUpdateTask, "InputsUpdate", 240, NULL, 3, NULL );
+
+	/*-------------Test tasks-----------------*/
+	//xTaskCreate( HAL_BoardTestTask, "boardTest", 240, NULL, 3, NULL );
+	//xTaskCreate( UART_DRIVER_echoTask, "echo", 240, NULL, 3, NULL );
+	/*-----------------------------------------------------*/
+
+	xTaskCreate( UART_DRIVER_TxGatekeeperTask, "TxGatekeeper", 240, NULL, 1, NULL );
+
+	/* Rx implemented with interruption
+	xTaskCreate( UART_DRIVER_RxGatekeeperTask, "RxGatekeeper", 240, NULL, 1, NULL );*/
+
+	/* Start the scheduler so the created tasks start executing. */
+	vTaskStartScheduler();
+
+	for( ;; );		/*Error occurred*/
+
+	/*while(1)	{	}*/
+	return 0;
+}
+/*==================[end of file]============================================*/

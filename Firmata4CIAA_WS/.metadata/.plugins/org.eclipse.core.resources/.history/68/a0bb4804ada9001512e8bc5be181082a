@@ -1,0 +1,53 @@
+/*
+ * TIMER_DRIVER.h
+ *
+ *  Created on: 5/11/2015
+ *      Author: Ian
+ */
+
+#ifndef TIMER_DRIVER_H_
+#define TIMER_DRIVER_H_
+
+/*==================[inclusions]=============================================*/
+
+/*==================[cplusplus]==============================================*/
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/*==================[macros and definitions]=================================*/
+
+#define TIMER_MATCH_0      0
+#define TIMER_MATCH_1      1
+#define TIMER_MATCH_2      2
+#define TIMER_MATCH_3      3
+
+#define TIMER_0			0
+#define TIMER_1			1
+#define TIMER_2			2
+#define TIMER_3			3
+
+/*==================[typedef]================================================*/
+typedef void (*voidFunctionPointer_t)(void);
+
+/*==================[external data declaration]==============================*/
+
+/*==================[external functions declaration]=========================*/
+void TIMER_DRIVER_InitTimer(uint8_t  , uint32_t, voidFunctionPointer_t);
+void TIMER_DRIVER_DeinitTimer(uint8_t timerNumber);
+uint32_t TIMER_DRIVER_microsecondsToTicks(uint32_t uS);
+void TIMER_DRIVER_EnableCompareMatchOnTimer(uint8_t , uint8_t , uint32_t , voidFunctionPointer_t );
+void TIMER_DRIVER_DisableCompareMatchOnTimer(uint8_t , uint8_t);
+void TIMER_DRIVER_SetTimerMatch(uint8_t , uint8_t ,uint32_t );
+
+/*==================[cplusplus]==============================================*/
+
+#ifdef __cplusplus
+}
+#endif
+
+/*==================[end of file]============================================*/
+
+
+#endif /* TIMER_DRIVER_H_ */

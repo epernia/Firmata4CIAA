@@ -1,0 +1,51 @@
+/*
+ * SERVO_DRIVER.h
+ *
+ *  Created on: 16/11/2015
+ *      Author: Ian
+ */
+
+#ifndef SERVO_DRIVER_H_
+#define SERVO_DRIVER_H_
+
+/*==================[inclusions]=============================================*/
+
+/*==================[cplusplus]==============================================*/
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/*==================[macros and definitions]=================================*/
+
+/*==================[typedef]================================================*/
+typedef struct
+{
+   int8_t pin;                    /* Pin number */
+   uint32_t usFor0DegreAngle;     /* Microseconds for 0-degre angle */
+   uint32_t usFor180DegreAngle;   /* Microseconds for 180-degre angle */
+   uint32_t usForStop;            /* Microseconds for 90-degre angle or when stops */
+} servoConfig_t;
+
+/* Define Boolean Data Type */
+typedef uint8_t bool_t;
+/*==================[external data declaration]==============================*/
+
+/*==================[external functions declaration]=========================*/
+void servoConfig(void)
+bool_t servoAttach( uint8_t pin);
+bool_t servoAttachWithConfig( uint8_t pin, servoConfig_t * servoConfig );// TO BE IMPLEMENTED
+uint8_t isServoAttached( uint8_t pin );
+bool_t servoDetach( uint8_t pin );
+bool_t servoWrite( uint8_t pin, uint8_t angle );
+uint8_t servoRead( uint8_t pin );
+
+/*==================[cplusplus]==============================================*/
+
+#ifdef __cplusplus
+}
+#endif
+
+/*==================[end of file]============================================*/
+
+#endif /* SERVO_DRIVER_H_ */

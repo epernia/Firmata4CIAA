@@ -1,0 +1,15 @@
+eclipse.preferences.version=1
+gdb.client.commands=
+gdb.client.executable=${arm_none_eabi_gdb_path}\\arm-none-eabi-gdb.exe
+gdb.client.other=
+gdb.openocd.doDebugInRam=false
+gdb.openocd.doInitialReset=false
+gdb.openocd.doPreRunReset=false
+gdb.openocd.enableSemihosting=false
+gdb.openocd.init.other=monitor reset\r\nmonitor halt
+gdb.openocd.initialReset.type=init
+gdb.openocd.preRun.other=monitor soft_reset_halt
+gdb.openocd.preRunReset.type=halt
+gdb.server.doStart=true
+gdb.server.executable=${openocd_path}/${openocd_executable}
+gdb.server.other=-f cfg\\ciaa-nxp.cfg

@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">&#x0A;<refactoring comment="Rename resource &apos;Firmata/src/IO_DRIVER.c&apos; to &apos;HAL.c&apos;" description="Rename resource &apos;IO_DRIVER.c&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="src/IO_DRIVER.c" name="HAL.c" stamp="1446744571491" updateReferences="true"/>&#x0A;<refactoring comment="Rename resource &apos;Firmata/inc/IO_DRIVER.h&apos; to &apos;HAL.h&apos;" description="Rename resource &apos;IO_DRIVER.h&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="inc/IO_DRIVER.h" name="HAL.h" stamp="1446744583628" updateReferences="true"/>
+</session>

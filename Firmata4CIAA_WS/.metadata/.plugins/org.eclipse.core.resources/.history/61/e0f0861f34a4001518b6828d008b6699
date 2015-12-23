@@ -1,0 +1,417 @@
+/*
+ * HAL.c
+ *
+ * LPC 4337
+ *  Created on: Aug 10, 2015
+ *      Author: ian
+ */
+
+/*==================[inclusions]=============================================*/
+#include "main.h"
+#include "HAL.h"
+#include "sct_pwm_18xx_43xx.h"
+
+#include "TIMER_DRIVER.h"
+
+/*==================[macros and definitions]=================================*/
+/*PWM/SERVO related*/
+#define MAX_TICKS		204000000
+
+#define SCT_PWM				LPC_SCT
+#define PWM_FREC		1000        /* PWM period = 1ms */
+#define PWM_COUNTSPERCYCLE 		MAX_TICKS/PWM_FREC
+
+/*Necesito que en 2ms (el rango de variacion del servo) entren 180º, lo que da 11,1..uSec por grado
+ * => la frecuencia del timer 1 tiene que ser f = 1/(11,1..uSec)=90000  */
+#define TIMER_PERIOD      20000  /*value in uSec. Equals to 20ms*/
+#define SERVO_MAX_PERIOD     2000  /*value in uSec. Equals to 2ms. does not take in account the 0.5ms offset */
+#define SERVO_MIN_PERIOD 500 /*value in uSec. Equals to 0.5ms*/
+
+#define CTOUT_0         0
+#define CTOUT_1         1
+#define CTOUT_2         2
+#define CTOUT_3         3
+#define CTOUT_4         4
+#define CTOUT_5         5
+#define CTOUT_6         6
+#define CTOUT_7         7
+#define CTOUT_8         8
+#define CTOUT_9         9
+#define CTOUT_10         10
+#define CTOUT_11         11
+#define CTOUT_12         12
+#define CTOUT_13         13
+#define NO_CTOUT		255
+#define NO_MODE			255
+#define NO_VALUE		255
+
+
+
+/*==================[internal data declaration]==============================*/
+/* Aclaraciones y ejemplos:
+ * De los nombres de la placa y pines hay que tener en cuenta 3 cosas:
+ * 1- GPIOn, que es solo el nombre del pin en la placa
+ * 2- GPIOs.port[pin], que es el nombre de ese GPIO en particular
+ * 3- PNs.port_pin, que es el nombre del pin en particular
+ * Por ejemplo: en el pin físico del LPC4337 n°74 (pin n°29 de la tira de pines P2) está conectado el GPIO0,
+ * el cual es equivalente a P6_1 y se traduce a GPIO3[0] si se elige la función 1 del PIN.
+ * Para la función Chip_SCU_PinMux, que es la que permite la configuración de funciones de un pin,
+ * hay que utilizar el P6_1 (port=6, pin=1) y elegir FUNC0 si se desea trabajar con el GPIO3[0]
+ * En cuanto a Chip_GPIO_SetDir hay que utilizar el nombre del GPIO,que sería GPIO3[0] (port=3, pin=0)
+ *
+ * Se recomienda fuertemente referirse al archivo EDU-CIAA-NXP_Pinout,
+ * en donde están concentrados todos los nombres con los que trabajaremos.
+ * Fuentes: http://proyecto-ciaa.com.ar/devwiki/doku.php?id=desarrollo:edu-ciaa:edu-ciaa-nxp
+ * 			http://proyecto-ciaa.com.ar/devwiki/lib/exe/fetch.php?media=edu-ciaa-nxp:edu-ciaa-nxp_pinout_a4_v3r2_es.pdf
+ */
+
+/*	------------------ Mapeo de pines ------------------
+ * Esto sirve para desprenderse de los nombres de las placas y pasar a algo mas simple como PIN0,.... ETC
+ *
+ * De cada pin necesito saber: el nombre del pin (P), el nombre del GPIO y función por defecto, que serán:
+ * - Para pines digitales, la del GPIO, por lo que se guarda la función que corresponda a cada pin.
+ * Todos los pines que no sean los de los Switches (PULS_0,..., PULS_4) serán inicializados como salidas
+ * - Para pines analogicos, las funciónes de ADC o DAC.
+ * Por lo tanto, la estructura ciaaPin_t tendrá en sus campos:
+ * { PNs.port , PNs.pin , GPIOs.port , GPIOs.pin , defaultFunc }
+ */
+
+/* GPIO pin Numbers */
+ciaaP CIAApins[] = {
+
+/*NOTA: si bien los pines: PIN1,2,7,8 y 9 tienen CTOUT, no es accesible*/
+
+		/*PIN0*/   {{1,0},{0,4,FUNC0},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*PULS_0   TEC_1*/
+		/*PIN1*/   {{1,1},{0,8,FUNC0},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*PULS_1   TEC_2*/
+		/*PIN2*/   {{1,2},{0,9,FUNC0},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*PULS_2   TEC_3*/
+		/*PIN3*/   {{1,6},{1,9,FUNC0},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*PULS_3   TEC_4*/
+
+		/*PIN4*/   {{2,0},{5,0,FUNC4},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*LED0_R*/
+		/*PIN5*/   {{2,1},{5,1,FUNC4},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*LED0_G*/
+		/*PIN6*/   {{2,2},{5,2,FUNC4},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*LED0_B*/
+		/*PIN7*/   {{2,10},{0,14,FUNC0},{CTOUT_2,FUNC1,NO_MODE,NO_VALUE}},   /*LED1*/
+		/*PIN8*/   {{2,11},{1,11,FUNC0},{CTOUT_5,FUNC1,NO_MODE,NO_VALUE}},   /*LED2*/
+		/*PIN9*/   {{2,12},{1,12,FUNC0},{CTOUT_4,FUNC1,NO_MODE,NO_VALUE}},   /*LED3*/
+
+		/*PIN10*/   {{6,1},{3,0,FUNC0},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*GPIO0*/
+		/*PIN11*/   {{6,4},{3,3,FUNC0},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*GPIO1*/
+		/*PIN12*/   {{6,5},{3,4,FUNC0},{CTOUT_6,FUNC1,NO_MODE,SERVO_MIN_PERIOD}},   /*GPIO2*/
+		/*PIN13*/   {{6,7},{5,15,FUNC4},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*GPIO3*/
+		/*PIN14*/   {{6,8},{5,16,FUNC4},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*GPIO4*/
+		/*PIN15*/   {{6,9},{3,5,FUNC0},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*GPIO5*/
+		/*PIN16*/   {{6,10},{3,6,FUNC0},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*GPIO6*/
+		/*PIN17*/   {{6,11},{3,7,FUNC0},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*GPIO7*/
+		/*PIN18*/   {{6,12},{2,8,FUNC0},{CTOUT_7,FUNC1,NO_MODE,SERVO_MIN_PERIOD}},   /*GPIO8*/
+
+		/*PIN19*/   {{4,4},{2,4,FUNC0},{CTOUT_2,FUNC1,NO_MODE,SERVO_MIN_PERIOD}},   /*LCD1*/
+		/*PIN20*/   {{4,5},{2,5,FUNC0},{CTOUT_5,FUNC1,NO_MODE,SERVO_MIN_PERIOD}},   /*LCD2*/
+		/*PIN21*/   {{4,6},{2,6,FUNC0},{CTOUT_4,FUNC1,NO_MODE,SERVO_MIN_PERIOD}},   /*LCD3*/
+		/*PIN22*/   {{4,10},{5,14,FUNC4},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*LCD4*/
+		/*PIN23*/   {{4,8},{5,12,FUNC4},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*LCD_RS*/
+		/*PIN24*/   {{4,9},{5,13,FUNC4},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*LCD_EN*/
+
+		/*PIN25*/   {{4,0},{2,0,FUNC0},{NO_CTOUT,NO_CTOUT,NO_MODE,NO_VALUE}},   /*T_FIL0*/
+		/*PIN26*/   {{4,1},{2,1,FUNC0},{CTOUT_1,FUNC1,NO_MODE,SERVO_MIN_PERIOD}},   /*T_FIL1*/
+		/*PIN27*/   {{4,2},{2,2,FUNC0},{CTOUT_0,FUNC1,NO_MODE,SERVO_MIN_PERIOD}},   /*T_FIL2*/
+		/*PIN28*/   {{4,3},{2,3,FUNC0},{CTOUT_3,FUNC1,NO_MODE,SERVO_MIN_PERIOD}},   /*T_FIL3*/
+		/*PIN29*/   {{1,5},{1,8,FUNC0},{CTOUT_10,FUNC1,NO_MODE,SERVO_MIN_PERIOD}},   /*T_COL0*/
+		/*PIN30*/   {{7,4},{3,12,FUNC0},{CTOUT_13,FUNC1,NO_MODE,SERVO_MIN_PERIOD}},   /*T_COL1*/
+		/*PIN31*/   {{7,5},{3,13,FUNC0},{CTOUT_12,FUNC1,NO_MODE,SERVO_MIN_PERIOD}},   /*T_COL2*/
+
+					};
+
+
+/*==================[internal functions declaration]=========================*/
+static void analogPinsInit(void);
+static void digitalPinsInit(void);
+void pwmInit(void);
+void servoInit(void);
+
+
+void timer1CompareMatch0func(void);
+void timer1CompareMatch1func(void);
+void timer1CompareMatch2func(void);
+void timer1CompareMatch3func(void);
+
+/*==================[internal data definition]===============================*/
+
+
+voidFunctionPointer_t timer1CompareMatchFuncPointers[4]  = {timer1CompareMatch0func,timer1CompareMatch1func,NULL,NULL};//timer1CompareMatch2func,timer1CompareMatch3func};
+uint32_t timer1CompareMatchPeriod_uS[4] = {TIMER_PERIOD, SERVO_MIN_PERIOD,0 ,0};//SERVO_MIN_PERIOD,SERVO_MIN_PERIOD};
+
+/*==================[external data definition]===============================*/
+
+/*==================[internal functions definition]==========================*/
+//TODO: Hacer
+static void analogPinsInit(void)
+{
+	ADC_CLOCK_SETUP_T ADCSetup;
+
+	Chip_ADC_Init(LPC_ADC0,&ADCSetup);
+	Chip_ADC_SetBurstCmd(LPC_ADC0, DISABLE);
+
+	Chip_ADC_EnableChannel(LPC_ADC0,ADC_CH1,DISABLE);
+	Chip_ADC_Int_SetChannelCmd(LPC_ADC0,ADC_CH1,DISABLE);
+
+	Chip_ADC_EnableChannel(LPC_ADC0,ADC_CH2,DISABLE);
+	Chip_ADC_Int_SetChannelCmd(LPC_ADC0,ADC_CH2,DISABLE);
+
+	Chip_ADC_EnableChannel(LPC_ADC0,ADC_CH3,DISABLE);
+	Chip_ADC_Int_SetChannelCmd(LPC_ADC0,ADC_CH3,DISABLE);
+
+	//Source: http://docs.lpcware.com/lpcopen/v1.03/lpc18xx__43xx_2examples_2periph_2periph__adc_2adc_8c_source.html
+	//Line 221
+}
+
+static void digitalPinsInit(void)
+{
+	OPTIMAL_DATA_TYPE pinNumber=0, mode=INPUT;
+
+	for(pinNumber=PIN0;pinNumber<=PIN31;pinNumber++)
+	{
+		if(pinNumber>=DIGITAL_INPUTS)
+		{
+			/*Si ya setee las entradas (INPUTS. En este caso los pulsadores), seteo las salidas (OUTPUTS. En este caso los leds y el resto de los pines por defecto)*/
+			mode=OUTPUT;
+		}
+		Chip_SCU_PinMux(CIAApins[pinNumber].PNs.port , CIAApins[pinNumber].PNs.pin , MD_PUP|MD_EZI|MD_ZI , CIAApins[pinNumber].GPIOs.func);
+		Chip_GPIO_SetDir(LPC_GPIO_PORT , CIAApins[pinNumber].GPIOs.port , (1<<CIAApins[pinNumber].GPIOs.pin), mode);
+	}
+}
+
+/*
+ * Initialize PWM peripheral. To use it one must set a pin as SCT_OUT
+ */
+void pwmInit(void)
+{
+	//Source: https://www.lpcware.com/content/faq/how-use-sct-standard-pwm-using-lpcopen
+	/* Initialize the SCT as PWM and set frequency */
+	Chip_SCTPWM_Init(SCT_PWM);
+	Chip_SCTPWM_SetRate(SCT_PWM, PWM_FREC);
+
+	Chip_SCTPWM_Start(SCT_PWM);
+
+	//FIXME: fijate porque por cada pwm se crea un nuevo canal cuando creo q con 1 solo alcanza
+}
+
+void timer1CompareMatch0func(void)
+{
+
+	if(CIAApins[PIN12].PWMs.mode == SERVO)
+	{
+		HAL_SetOutput(PIN12,TRUE);
+		TIMER_DRIVER_SetTimerMatch(TIMER_0, TIMER_MATCH_1, CIAApins[PIN12].PWMs.servoValue);
+	}
+	if(CIAApins[PIN18].PWMs.mode == SERVO)
+	{
+		HAL_SetOutput(PIN18,TRUE);
+		TIMER_DRIVER_SetTimerMatch(TIMER_0, TIMER_MATCH_2, CIAApins[PIN18].PWMs.servoValue);
+	}
+	if(CIAApins[PIN19].PWMs.mode == SERVO)
+	{
+		HAL_SetOutput(PIN19,TRUE);
+		TIMER_DRIVER_SetTimerMatch(TIMER_0, TIMER_MATCH_3, CIAApins[PIN19].PWMs.servoValue);
+	}
+
+}
+
+void timer1CompareMatch1func(void)
+{
+	if(CIAApins[PIN12].PWMs.mode == SERVO){HAL_SetOutput(PIN12,FALSE);}
+}
+
+void timer1CompareMatch2func(void)
+{
+	if(CIAApins[PIN18].PWMs.mode == SERVO){HAL_SetOutput(PIN18,FALSE);}
+}
+
+void timer1CompareMatch3func(void)
+{
+	if(CIAApins[PIN19].PWMs.mode == SERVO){HAL_SetOutput(PIN19,FALSE);}
+}
+
+void servoInit(void)
+{
+	//{TIMER_PERIOD, SERVO_MIN_PERIOD,SERVO_MIN_PERIOD,SERVO_MIN_PERIOD}
+	TIMER_DRIVER_InitTimer(TIMER_0, timer1CompareMatchPeriod_uS ,timer1CompareMatchFuncPointers);
+}
+
+
+/*==================[external functions definition]==========================*/
+void HAL_Init(void)
+{
+	SystemCoreClockUpdate();
+	Chip_GPIO_Init(LPC_GPIO_PORT);
+	analogPinsInit();
+	digitalPinsInit();
+	pwmInit();
+	servoInit();
+}
+
+
+//Dice si el pin es entrada o salida. 1 para Output, 0 para input
+OPTIMAL_DATA_TYPE HAL_CheckPin(OPTIMAL_DATA_TYPE pinNumber)
+{
+	return Chip_GPIO_GetPinDIR( LPC_GPIO_PORT, CIAApins[pinNumber].GPIOs.port , CIAApins[pinNumber].GPIOs.pin );
+}
+
+/*return 1 if the PIN has PWM/Servo function*/
+OPTIMAL_DATA_TYPE HAL_CheckPinPWMFunc(OPTIMAL_DATA_TYPE pinNumber)
+{
+	return (CIAApins[pinNumber].PWMs.ctout!=NO_CTOUT);
+}
+
+/*Setea un valor de una salida*/
+void HAL_SetOutput(OPTIMAL_DATA_TYPE pinNumber, OPTIMAL_DATA_TYPE value)
+{
+	if(HAL_CheckPin(pinNumber))
+	{
+		Chip_GPIO_SetPinState( LPC_GPIO_PORT, CIAApins[pinNumber].GPIOs.port , CIAApins[pinNumber].GPIOs.pin, value);
+	}
+}
+
+/*Change between: INPUT(0x00), OUTPUT(0x01), ANALOG(0x02), PWM(0x03), SERVO(0x04) */
+void HAL_ChangePinMode(OPTIMAL_DATA_TYPE pinNumber, OPTIMAL_DATA_TYPE mode)
+{
+	/*Digital I/O*/
+	if (mode==OUTPUT || mode==INPUT)
+	{
+		Chip_SCU_PinMux(CIAApins[pinNumber].PNs.port , CIAApins[pinNumber].PNs.pin , MD_PUP|MD_EZI|MD_ZI , CIAApins[pinNumber].GPIOs.func);
+		Chip_GPIO_SetDir(LPC_GPIO_PORT , CIAApins[pinNumber].GPIOs.port , (1<<CIAApins[pinNumber].GPIOs.pin), mode);
+	}
+	/*PWM*/
+	if (HAL_CheckPinPWMFunc(pinNumber))
+	{
+		if ((mode == PWM))
+		{
+			Chip_SCU_PinMux(CIAApins[pinNumber].PNs.port , CIAApins[pinNumber].PNs.pin , SCU_MODE_INACT , CIAApins[pinNumber].PWMs.func);
+			Chip_SCTPWM_SetOutPin(SCT_PWM, CIAApins[pinNumber].PWMs.ctout+1, CIAApins[pinNumber].PWMs.ctout); //ctout+1 pq para CTOUT_0 explota (pq es 0)
+			/* Start with 0% duty cycle */
+			HAL_SetPWM(pinNumber, Chip_SCTPWM_PercentageToTicks(SCT_PWM,0));
+			CIAApins[pinNumber].PWMs.mode = PWM;
+		}
+		if(mode == SERVO)
+		{
+			Chip_SCU_PinMux(CIAApins[pinNumber].PNs.port , CIAApins[pinNumber].PNs.pin , MD_PUP|MD_EZI|MD_ZI , CIAApins[pinNumber].GPIOs.func);
+			Chip_GPIO_SetDir(LPC_GPIO_PORT , CIAApins[pinNumber].GPIOs.port , (1<<CIAApins[pinNumber].GPIOs.pin), OUTPUT);
+			CIAApins[pinNumber].PWMs.mode = SERVO;
+		}
+	}
+}
+
+/* Sets PWM value.
+ * First argument is the pin number where pwm/servo is generated.
+ * Second argument is the range of the PWM (from 0 (0%) to 255(100%)) or servo (from 0 (0.5ms) to 180(2.5ms))
+ */
+void HAL_SetPWM(OPTIMAL_DATA_TYPE pinNumber, uint8_t value)
+{
+	OPTIMAL_DATA_TYPE ticksPerCycle=0, ticks=0;
+
+	/*PWM signal has a period of 1ms, and goes from 0ms (0%) to 1ms(100%)
+	 * and its value goes from 0 to 255*/
+	if(CIAApins[pinNumber].PWMs.mode == PWM)
+	{
+		ticks=(PWM_COUNTSPERCYCLE*value)/255; //percent = value * 100/255
+		Chip_SCTPWM_SetDutyCycle(SCT_PWM, CIAApins[pinNumber].PWMs.ctout+1, ticks);
+	}
+
+	/*SERVO signal has a period of 20ms, and goes from 0.5ms (500 uSec=offset)
+	 * to 2.5ms(2500 uSec) and its value goes from 0 to 180  */
+
+	else //if its not pwm, it must be servo
+	{
+		ticks = SERVO_MIN_PERIOD + (SERVO_MAX_PERIOD*value)/180;
+		CIAApins[pinNumber].PWMs.servoValue = ticks;
+	}
+}
+
+
+
+/* Obtiene el valor del pin. Si sale del rango de pines válidos devuelve 0 //xxx: podría devolver -1 como error...
+   Nota: para pulsadores con pull-up devolverá 1 cuando no esté presionado*/
+OPTIMAL_DATA_TYPE HAL_GetPinState(OPTIMAL_DATA_TYPE pinNumber)
+{
+	OPTIMAL_DATA_TYPE ret=0;
+	if (pinNumber<TOTAL_DIGITAL_PINS)	/*anti fallas. cuando se pase de la cantidad de pines creados devuelve 0*/
+	{
+		ret = Chip_GPIO_GetPinState( LPC_GPIO_PORT, CIAApins[pinNumber].GPIOs.port , CIAApins[pinNumber].GPIOs.pin );
+	}
+	return(ret);
+}
+
+/*
+ * Devuelve el valor de los "puertos de 8 bits" que necesita el firmata para trabajar.
+ * Devuelve -1 si no hubo cambio en los valores del puerto desde la ultima vez que se entró a la función..
+ *
+*/
+int16_t HAL_GetPort(uint8_t portNum)
+{
+	static int16_t portValAnt[16]={-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};
+	int16_t portVal=0;
+	OPTIMAL_DATA_TYPE i, portNumx8=portNum*8;
+
+	uint8_t pinState=0;
+	for(i=0;i<8;i++)
+	{
+		pinState=HAL_GetPinState(i+portNumx8);
+		if(pinState)
+		{
+			portVal |= 1<<i;		//set bit
+		}
+		else
+		{
+			portVal &= ~(1<<i);		//clear bit
+		}
+	}
+	if(portVal == portValAnt[portNum])
+	{
+		portVal=-1;		//Sin cambios
+	}
+	else
+	{
+		portValAnt[portNum] = portVal;
+	}
+	return(portVal);
+}
+
+int16_t HAL_GetAnalogPin(OPTIMAL_DATA_TYPE channel)
+{
+	static int16_t pinValAnt[16]={-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};
+	int16_t pinVal=0;
+	uint16_t adcVal=0;
+
+
+	Chip_ADC_EnableChannel(LPC_ADC0,channel,ENABLE);
+	Chip_ADC_SetStartMode(LPC_ADC0, ADC_START_NOW, ADC_TRIGGERMODE_RISING);
+
+	while((Chip_ADC_ReadStatus(LPC_ADC0 , channel , ADC_DR_DONE_STAT) != SET));
+	Chip_ADC_ReadValue(LPC_ADC0 , channel, &adcVal);
+
+	Chip_ADC_EnableChannel(LPC_ADC0,channel,DISABLE);
+
+	pinVal=(int16_t)adcVal;
+
+	if(pinVal == pinValAnt[channel])
+	{
+		pinVal=-1;		//Sin cambios
+	}
+	else
+	{
+		pinValAnt[channel] = pinVal;
+	}
+
+	return(pinVal);
+}
+
+//Versión se prueba diseñada para el firmata, que espera puertos de 8 bits. Setea salidas.
+void HAL_SetPort(uint8_t portNum, uint8_t portValue)
+{
+	OPTIMAL_DATA_TYPE i,portNumx8=portNum*8;
+	for(i=0;i<8;i++)
+	{
+		HAL_SetOutput(i + portNumx8,(portValue>>i)&0x1);
+	}
+}
+
+
+/*==================[end of file]============================================*/

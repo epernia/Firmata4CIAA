@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<section name="Workbench">
+	<section name="org.eclipse.ui.texteditor.FindReplaceDialog">
+		<item value="false" key="isRegEx"/>
+		<item value="PWM_COUNTSPERCYCLE" key="selection"/>
+		<item value="false" key="casesensitive"/>
+		<item value="false" key="incremental"/>
+		<item value="true" key="wrap"/>
+		<item value="false" key="wholeword"/>
+		<list key="findhistory">
+			<item value="PWM_COUNTSPERCYCLE"/>
+			<item value="LPC4337_MAX_FREC"/>
+			<item value="SERVO_MIN_PERIOD"/>
+			<item value="asociated"/>
+			<item value="TIMER_DRIVER"/>
+			<item value="MAX_TICKS"/>
+			<item value="EXTENDED_ANALOG"/>
+			<item value="PWM"/>
+		</list>
+		<list key="replacehistory">
+			<item value="SERVO_MIN_TIME"/>
+			<item value="SERVO_MAX_TIME"/>
+			<item value="TIMER_TIME"/>
+			<item value="SERVO_MIN_FREC"/>
+			<item value="MATCHNUMBER1"/>
+			<item value="timer1CompareMatchFunctionPointer"/>
+			<item value="compareMatchFrequency"/>
+			<item value="compareMatchFrequencie"/>
+		</list>
+	</section>
+	<section name="org.eclipse.ui.texteditor.FindReplaceDialog_dialogBounds">
+		<item value="270" key="DIALOG_WIDTH"/>
+		<item value="1|Tahoma|8.25|0|WINDOWS|1|-11|0|0|0|400|0|0|0|1|0|0|0|0|Tahoma" key="DIALOG_FONT_NAME"/>
+		<item value="357" key="DIALOG_HEIGHT"/>
+		<item value="502" key="DIALOG_X_ORIGIN"/>
+		<item value="140" key="DIALOG_Y_ORIGIN"/>
+	</section>
+</section>

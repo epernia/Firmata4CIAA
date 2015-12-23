@@ -1,0 +1,208 @@
+/*
+ * TIMER_DRIVER.c
+ *
+ *  Created on: 5/11/2015
+ *      Author: Ian
+ */
+
+/*==================[inclusions]=============================================*/
+#include "main.h"
+#include "chip.h"
+#include "TIMER_DRIVER.h"
+
+/*==================[macros and definitions]=================================*/
+#define MAX_FREC		204000000 //Frecuencia del micro
+
+#define MAX_SYSCALL_INTERRUPT_PRIORITY	5
+
+
+/*==================[internal data declaration]==============================*/
+typedef struct
+{
+	LPC_TIMER_T *name;
+	uint32_t RGU; //Reset Generator Unit
+	uint32_t IRQn;
+
+}timerStaticData_t;
+
+typedef struct
+{
+	voidFunctionPointer_t timerCompareMatchFunctionPointer[4];
+}timerDinamicData_t;
+
+
+/*==================[internal functions declaration]=========================*/
+
+/*User forgot to initialize functions for the compare match interrupt*/
+static void timerCompareMatchError(void)
+{
+	while(1);
+}
+/*==================[internal data definition]===============================*/
+
+/*Timers Static Data, given by the uC libraries*/
+const timerStaticData_t timer_sd[4] =
+{
+		{LPC_TIMER0,RGU_TIMER0_RST,TIMER0_IRQn},
+		{LPC_TIMER1,RGU_TIMER1_RST,TIMER1_IRQn},
+		{LPC_TIMER2,RGU_TIMER2_RST,TIMER2_IRQn},
+		{LPC_TIMER3,RGU_TIMER3_RST,TIMER3_IRQn}
+};
+
+/*Timers dynamic data. Function pointers and Compare match frequencies, which can vary.
+ * This is the default initialization*/
+timerDinamicData_t timer_dd[4] =
+{
+		{timerCompareMatchError,timerCompareMatchError,timerCompareMatchError,timerCompareMatchError},
+		{timerCompareMatchError,timerCompareMatchError,timerCompareMatchError,timerCompareMatchError},
+		{timerCompareMatchError,timerCompareMatchError,timerCompareMatchError,timerCompareMatchError},
+		{timerCompareMatchError,timerCompareMatchError,timerCompareMatchError,timerCompareMatchError}
+};
+
+
+/*==================[external data definition]===============================*/
+
+/*==================[internal functions definition]==========================*/
+/* * @brief: Executes the functions passed by parameter in the TIMER_DRIVER_InitTimer, at the chosen frequencies
+ *
+ * */
+void TIMER0_IRQHandler(void)
+{
+	portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
+	uint8_t timer_match_number = 0;
+
+	for(timer_match_number = 0 ; timer_match_number <= TIMER_MATCH_3 ; timer_match_number++ )
+	{
+		if (Chip_TIMER_MatchPending(LPC_TIMER0, timer_match_number))
+		{
+			/*Run the functions saved in the timer dynamic data structure*/
+			(*timer_dd[TIMER_0].timerCompareMatchFunctionPointer[timer_match_number])();
+			Chip_TIMER_ClearMatch(LPC_TIMER0, timer_match_number);
+		}
+	}
+}
+
+
+void TIMER1_IRQHandler(void)
+{
+	portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
+	uint8_t timer_match_number = 0;
+
+	for(timer_match_number = 0 ; timer_match_number <= TIMER_MATCH_3 ; timer_match_number++ )
+	{
+		if (Chip_TIMER_MatchPending(LPC_TIMER1, timer_match_number))
+		{
+			/*Run the functions saved in the timer dynamic data structure*/
+			(*timer_dd[TIMER_1].timerCompareMatchFunctionPointer[timer_match_number])();
+			Chip_TIMER_ClearMatch(LPC_TIMER1, timer_match_number);
+		}
+	}
+}
+
+void TIMER2_IRQHandler(void)
+{
+	portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
+	uint8_t timer_match_number = 0;
+
+	for(timer_match_number = 0 ; timer_match_number <= TIMER_MATCH_3 ; timer_match_number++ )
+	{
+		if (Chip_TIMER_MatchPending(LPC_TIMER2, timer_match_number))
+		{
+			/*Run the functions saved in the timer dynamic data structure*/
+			(*timer_dd[TIMER_2].timerCompareMatchFunctionPointer[timer_match_number])();
+			Chip_TIMER_ClearMatch(LPC_TIMER2, timer_match_number);
+		}
+	}
+}
+
+void TIMER3_IRQHandler(void)
+{
+	portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
+	uint8_t timer_match_number = 0;
+
+	for(timer_match_number = 0 ; timer_match_number <= TIMER_MATCH_3 ; timer_match_number++ )
+	{
+		if (Chip_TIMER_MatchPending(LPC_TIMER3, timer_match_number))
+		{
+			/*Run the functions saved in the timer dynamic data structure*/
+			(*timer_dd[TIMER_3].timerCompareMatchFunctionPointer[timer_match_number])();
+			Chip_TIMER_ClearMatch(LPC_TIMER3, timer_match_number);
+		}
+	}
+}
+/*==================[external functions definition]==========================*/
+
+
+/**
+ * @brief	Initialize Timer peripheral
+ * @param	timerNumber   : can be 0, 1, 2 or 3
+ * @param	compareMatchPeriod_uS   : Array ([4]) containing Match 0, 1, 2 & 3 periods.
+ * @param	voidFunctionPointer   : Array ([4]) containing the functions that will be
+ * 									used when the compare match occurs
+ * @return	None
+ * @note   Match 0 frequency is the timer period (cannot be 0), and it should be greater than the other periods
+ * 		If compareMatchPeriod[i]=0, then that compare match is not used
+ */
+void TIMER_DRIVER_InitTimer(uint8_t timerNumber , uint32_t *compareMatchPeriod_uS ,voidFunctionPointer_t *voidFunctionPointer)
+{
+	//Source: http://docs.lpcware.com/lpcopen/v1.03/lpc18xx__43xx_2examples_2periph_2periph__blinky_2blinky_8c_source.html
+	uint8_t compareMatchNumber=0;
+
+	/*If timer period = CompareMatch0 Period = 0 => ERROR*/
+	if (compareMatchPeriod_uS[0]==0)
+	{
+		timerCompareMatchError();
+	}
+
+	/* Enable timer clock and reset it */
+	  Chip_TIMER_Init(timer_sd[timerNumber].name);
+	  Chip_RGU_TriggerReset(timer_sd[timerNumber].RGU);
+	  while (Chip_RGU_InReset(timer_sd[timerNumber].RGU)) {}
+	  Chip_TIMER_Reset(timer_sd[timerNumber].name);
+
+
+	/* Update function pointers and initialize compare match periods of the timer with the received values*/
+	for(compareMatchNumber=0;compareMatchNumber<=3;compareMatchNumber++)
+	{
+		timer_dd[timerNumber].timerCompareMatchFunctionPointer[compareMatchNumber] = voidFunctionPointer[compareMatchNumber];
+
+		if(compareMatchPeriod_uS[compareMatchNumber])
+		{
+		  Chip_TIMER_MatchEnableInt(timer_sd[timerNumber].name, compareMatchNumber);
+		  Chip_TIMER_SetMatch(timer_sd[timerNumber].name, compareMatchNumber, (MAX_FREC/1000000)*compareMatchPeriod_uS[compareMatchNumber]);
+		}
+	}
+	/*Makes Timer Match 0 period the timer period*/
+	Chip_TIMER_ResetOnMatchEnable(timer_sd[timerNumber].name, TIMER_MATCH_0);
+
+	/*Enable timer*/
+	  Chip_TIMER_Enable(timer_sd[timerNumber].name);
+
+	  /* Enable timer interrupt */
+	  NVIC_SetPriority(timer_sd[timerNumber].IRQn, MAX_SYSCALL_INTERRUPT_PRIORITY+1);
+	  NVIC_EnableIRQ(timer_sd[timerNumber].IRQn);
+	  NVIC_ClearPendingIRQ(timer_sd[timerNumber].IRQn);
+}
+
+/*Disable Timer.
+ * FIXME: TO BE TESTED*/
+void TIMER_DRIVER_DeinitTimer(uint8_t timerNumber)
+{
+	NVIC_DisableIRQ(timer_sd[timerNumber].IRQn);
+
+	Chip_TIMER_DeInit(timer_sd[timerNumber].name);
+
+}
+
+/*Allows the user to change the compare value nº 'matchNumber' of timer 'timerNumber'.
+ * This is specially useful to generate square waves if used in the function for the TIMER_MATCH_0 (because
+ * that compare match resets the timer counter), which will be passed as a parameter when initializing a timer
+ * @note: The selected time (3rd parameter) must be less than TIMER_MATCH_0's compareMatchTime_uS
+ *  for the compare match to make the interruption
+ */
+void TIMER_DRIVER_SetTimerMatch(uint8_t timerNumber, uint8_t matchNumber,uint32_t compareMatchPeriod_uS)
+{
+	Chip_TIMER_SetMatch(timer_sd[timerNumber].name, matchNumber, (MAX_FREC/1000000)*compareMatchPeriod_uS);
+
+}
+/*==================[end of file]============================================*/

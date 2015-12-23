@@ -1,0 +1,129 @@
+/*
+ * IO_DRIVER.h
+ *
+ *  Created on: Aug 10, 2015
+ *      Author: ian
+ */
+
+#ifndef IO_DRIVER_H_
+#define IO_DRIVER_H_
+
+/*==================[inclusions]=============================================*/
+
+/*==================[cplusplus]==============================================*/
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/*==================[macros and definitions]=================================*/
+#define OFF						0
+#define ON						1
+
+// Number of Analog and Digital pins used.
+#define TOTAL_ANALOG_PINS		3	//
+#define DIGITAL_INPUTS			4
+#define DIGITAL_OUTPUTS			28	//FIXME: para el modulo firmata. sacar despues
+#define TOTAL_DIGITAL_PINS		(DIGITAL_OUTPUTS + DIGITAL_INPUTS)
+#define TOTAL_DIGITAL_PORTS		ceil(TOTAL_DIGITAL_PINS/8)
+#define TOTAL_PINS				(TOTAL_ANALOG_PINS + TOTAL_DIGITAL_PINS)
+
+// pin modes
+#define INPUT 	                0x00 // digital pin in analogInput mode
+#define OUTPUT	                0x01 // digital pin in analogOutput mode
+#define ANALOG                  0x02 // analog pin in analogInput mode
+#define PWM                     0x03 // digital pin in PWM output mode
+#define SERVO                   0x04 // digital pin in Servo output mode
+#define SHIFT                   0x05 // shiftIn/shiftOut mode
+#define I2C                     0x06 // pin included in I2C setup
+#define TOTAL_PIN_MODES         7
+
+
+//DIGITAL PINS
+//OUTPUTS
+#define LED0_R		   			4			//P5.0
+#define LED0_G		   			5			//P5.1
+#define LED0_B		   			6			//P5.2
+#define LED1		   			7			//P0.14
+#define LED2		   			8			//P1.11
+#define LED3		   			9			//P1.9
+//INPUTS
+#define BUTTON_1		 		0			//P0.4
+#define BUTTON_2 				1			//P0.8
+#define BUTTON_3 				2			//P0.9
+#define BUTTON_4 				3			//P1.9
+
+/*	------------------ Mapeo de pines ------------------ */
+#define PIN0 					0		/*PULS_0   TEC_1*/
+#define PIN1 					1		/*PULS_1   TEC_2*/
+#define PIN2 					2		/*PULS_2   TEC_3*/
+#define PIN3 					3		/*PULS_3   TEC_4*/
+#define PIN4 					4		/*LED_R*/
+#define PIN5 					5		/*LED_G*/
+#define PIN6 					6		/*LED_B*/
+#define PIN7 					7		/*LED1*/
+#define PIN8 					8		/*LED2*/
+#define PIN9 					9		/*LED3*/
+#define PIN10 					10		/*GPIO0*/
+#define PIN11 					11		/*GPIO1*/
+#define PIN12					12		/*GPIO2*/
+#define PIN13 					13		/*GPIO3*/
+#define PIN14 					14		/*GPIO4*/
+#define PIN15 					15		/*GPIO5*/
+#define PIN16 					16		/*GPIO6*/
+#define PIN17 					17		/*GPIO7*/
+#define PIN18 					18		/*GPIO8*/
+#define PIN19					19		/*LCD1*/
+#define PIN20 					20		/*LCD2*/
+#define PIN21 					21		/*LCD3*/
+#define PIN22 					22		/*LCD4*/
+#define PIN23					23		/*LCD_RS*/
+#define PIN24 					24		/*LCD_EN*/
+#define PIN25 					25		/*T_FIL0*/
+#define PIN26 					26		/*T_FIL1*/
+#define PIN27 					27		/*T_FIL2*/
+#define PIN28 					28		/*T_FIL3*/
+#define PIN29 					29		/*T_COL0*/
+#define PIN30 					30		/*T_COL1*/
+#define PIN31 					31		/*T_COL2*/
+
+/*==================[typedef]================================================*/
+typedef struct
+{
+	OPTIMAL_DATA_TYPE Pport;
+	OPTIMAL_DATA_TYPE Ppin;
+	OPTIMAL_DATA_TYPE GPIOport;
+	OPTIMAL_DATA_TYPE GPIOpin;
+	OPTIMAL_DATA_TYPE defaultFunc;
+} ciaaP;
+/*==================[external data declaration]==============================*/
+
+/*==================[external functions declaration]=========================*/
+void IO_DRIVER_Init(void);
+
+OPTIMAL_DATA_TYPE IO_DRIVER_CheckPin(OPTIMAL_DATA_TYPE );
+
+void IO_DRIVER_SetOutput(OPTIMAL_DATA_TYPE , OPTIMAL_DATA_TYPE );
+
+OPTIMAL_DATA_TYPE IO_DRIVER_GetPinState(OPTIMAL_DATA_TYPE );
+
+void IO_DRIVER_ChangePinMode(OPTIMAL_DATA_TYPE, OPTIMAL_DATA_TYPE );
+
+void IO_DRIVER_SetPort(uint8_t , uint8_t );
+
+int16_t IO_DRIVER_GetPort(uint8_t );
+
+void IO_DRIVER_UpdateTask(void*);
+
+void IO_DRIVER_BoardTestTask(void*);
+
+
+/*==================[cplusplus]==============================================*/
+
+#ifdef __cplusplus
+}
+#endif
+
+/*==================[end of file]============================================*/
+
+#endif /* IO_DRIVER_H_ */

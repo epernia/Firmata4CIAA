@@ -1,0 +1,354 @@
+/* Copyright 2015, Ian Olivieri <ianolivieri93@gmail.com>
+ * All rights reserved.
+ *
+ * This file is part of the Firmata4CIAA program.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its
+ *    contributors may be used to endorse or promote products derived from this
+ *    software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+
+/** \brief Short description of this file
+ **
+ ** Long description of this file
+ **
+ **/
+
+/** \addtogroup Firmata4CIAA Firmata4CIAA
+ ** @{ */
+/** \addtogroup Firmata4CIAA
+ ** @{ */
+
+//TODO: hace un grafico y explicacion de la rampa para que se entienda all
+
+/*==================[inclusions]=============================================*/
+#include "main.h"
+#include "SERVO_DRIVER.h"
+#include "TIMER_DRIVER.h"
+#include "HAL.h"
+
+
+/*==================[macros and definitions]=================================*/
+#define EMPTY_POSITION 255
+#define MAX_NUMBER_OF_SERVOS 9
+
+#define SERVO_COMPLETECYCLE_PERIOD      20000  /*value in uSec. Equals to 20ms*/
+#define SERVO_MAXUPTIME_PERIOD     2000  /*value in uSec. Equals to 2ms. does not take in account the 0.5ms offset */
+#define SERVO_MINUPTIME_PERIOD 500 /*value in uSec. Equals to 0.5ms*/
+/*==================[internal data declaration]==============================*/
+typedef struct
+{
+	uint8_t pin; /*Pin number of the board, where the servo signal will come out*/
+	uint8_t angle; /*Angle of the servo*/
+	/*To manage each servo more efficiently, every one of them has a default
+	 * timer, match number and function associated depending of their position in the list
+	 * This can be done because all timers initialize with the same period (20ms). So,  if
+	 * you need different frequencies for different timers you will have to change that since
+	 * it won't be the same to attach a servo in one position or another in the list*/
+	uint8_t associatedTimer;
+	uint8_t associatedCompareMatch;
+	voidFunctionPointer_t associatedFunction;
+
+}attachedServo_t;
+/*==================[internal functions declaration]=========================*/
+uint32_t angleToMicroseconds(uint8_t );
+
+void timer1CompareMatch0func(void);
+void timer1CompareMatch1func(void);
+void timer1CompareMatch2func(void);
+void timer1CompareMatch3func(void);
+
+void timer2CompareMatch0func(void);
+void timer2CompareMatch1func(void);
+void timer2CompareMatch2func(void);
+void timer2CompareMatch3func(void);
+
+void timer3CompareMatch0func(void);
+void timer3CompareMatch1func(void);
+void timer3CompareMatch2func(void);
+void timer3CompareMatch3func(void);
+
+/*==================[internal data definition]===============================*/
+
+/*when the user adds a servo with servoAttach the list updates with the pin number of the element*/
+static attachedServo_t AttachedServoList[MAX_NUMBER_OF_SERVOS] =
+{
+		{EMPTY_POSITION , 0,  TIMER_1 , TIMER_MATCH_1 ,	timer1CompareMatch1func},
+		{EMPTY_POSITION , 0 , TIMER_1 , TIMER_MATCH_2 , timer1CompareMatch2func},
+		{EMPTY_POSITION , 0 , TIMER_1 , TIMER_MATCH_3 , timer1CompareMatch3func},
+		{EMPTY_POSITION , 0 , TIMER_2 , TIMER_MATCH_1 , timer2CompareMatch1func},
+		{EMPTY_POSITION , 0 , TIMER_2 , TIMER_MATCH_2 , timer2CompareMatch2func},
+		{EMPTY_POSITION , 0 , TIMER_2 , TIMER_MATCH_3 , timer2CompareMatch3func},
+		{EMPTY_POSITION , 0 , TIMER_3 , TIMER_MATCH_1 , timer3CompareMatch1func},
+		{EMPTY_POSITION , 0 , TIMER_3 , TIMER_MATCH_2 , timer3CompareMatch2func},
+		{EMPTY_POSITION , 0 , TIMER_3 , TIMER_MATCH_3 , timer3CompareMatch3func}
+};
+
+//TODO: si haces 1 sola funcion para el compare match 0 y 1 sola para las otras quizas puedas sacar el AttachedServoList.associatedFunction
+
+/*==================[external data definition]===============================*/
+
+/*==================[internal functions definition]==========================*/
+
+/*
+* @brief	Converts a value in angle to micro seconds for a specific type of servo (see the defines)
+* @param	angle:		angle of the servo
+* @return	Equivalent in microseconds for a specific type of servo (see the defines)
+* @note		Should be used with TIMER_DRIVER_microsecondsToTicks to use some of
+* the functions in the TIMER_DRIVER that requires ticks as a parameter
+*/
+uint32_t angleToMicroseconds(uint8_t angle)
+{
+	return (SERVO_MINUPTIME_PERIOD+(angle*SERVO_MAXUPTIME_PERIOD)/180); //500 + 2000*angle/180
+	//FIXME: Como estan las cosas ahora cada solo tenemos un tiempo exacto para los angulos multiplos de 9
+	// ya que la division da entera y no se pierden decimales (el error max es de +- 1 microsegundo)
+}
+
+/*
+ * @brief:	compare match 0 function. The one that is executed when the cycle ends (think about the timer ramp)
+ * @note: can't generalize this function for every timer because TIMER_DRIVER functions expect void-void function pointers
+ */
+void timer1CompareMatch0func(void)
+{
+	uint8_t servoListPosition= 0;
+
+	for(servoListPosition=0;servoListPosition<3;servoListPosition++)
+	{
+		if(AttachedServoList[servoListPosition].pin != EMPTY_POSITION)
+		{
+			HAL_SetOutput(AttachedServoList[servoListPosition].pin,TRUE);
+			TIMER_DRIVER_SetTimerMatch( AttachedServoList[servoListPosition].associatedTimer,
+										AttachedServoList[servoListPosition].associatedCompareMatch,
+										TIMER_DRIVER_microsecondsToTicks(angleToMicroseconds(AttachedServoList[servoListPosition].angle)));
+		}
+	}
+}
+
+void timer1CompareMatch1func(void)
+{
+	HAL_SetOutput(AttachedServoList[0].pin,FALSE);
+}
+
+void timer1CompareMatch2func(void)
+{
+	HAL_SetOutput(AttachedServoList[1].pin,FALSE);
+}
+
+void timer1CompareMatch3func(void)
+{
+	HAL_SetOutput(AttachedServoList[2].pin,FALSE);
+}
+
+//FIXME: puestas provisoriamente para que no explote alles
+void timer2CompareMatch0func(void)
+{
+	uint8_t servoListPosition= 3;
+
+	for(servoListPosition=3;servoListPosition<6;servoListPosition++)
+	{
+		if(AttachedServoList[servoListPosition].pin != EMPTY_POSITION)
+		{
+			HAL_SetOutput(AttachedServoList[servoListPosition].pin,TRUE);
+			TIMER_DRIVER_SetTimerMatch( AttachedServoList[servoListPosition].associatedTimer,
+										AttachedServoList[servoListPosition].associatedCompareMatch,
+										TIMER_DRIVER_microsecondsToTicks(angleToMicroseconds(AttachedServoList[servoListPosition].angle)));
+		}
+	}
+}
+void timer2CompareMatch1func(void)
+{
+	HAL_SetOutput(AttachedServoList[3].pin,FALSE);
+}
+void timer2CompareMatch2func(void)
+{
+	HAL_SetOutput(AttachedServoList[4].pin,FALSE);
+}
+void timer2CompareMatch3func(void)
+{
+	HAL_SetOutput(AttachedServoList[5].pin,FALSE);
+}
+
+void timer3CompareMatch0func(void)
+{
+	uint8_t servoListPosition= 3;
+
+	for(servoListPosition=6;servoListPosition<9;servoListPosition++)
+	{
+		if(AttachedServoList[servoListPosition].pin != EMPTY_POSITION)
+		{
+			HAL_SetOutput(AttachedServoList[servoListPosition].pin,TRUE);
+			TIMER_DRIVER_SetTimerMatch( AttachedServoList[servoListPosition].associatedTimer,
+										AttachedServoList[servoListPosition].associatedCompareMatch,
+										TIMER_DRIVER_microsecondsToTicks(angleToMicroseconds(AttachedServoList[servoListPosition].angle)));
+		}
+	}
+}
+void timer3CompareMatch1func(void)
+{
+	HAL_SetOutput(AttachedServoList[6].pin,FALSE);
+}
+void timer3CompareMatch2func(void)
+{
+	HAL_SetOutput(AttachedServoList[7].pin,FALSE);
+}
+void timer3CompareMatch3func(void)
+{
+	HAL_SetOutput(AttachedServoList[8].pin,FALSE);
+}
+
+/*==================[external functions definition]==========================*/
+
+/* @Brief: Initializes the servo peripheral
+ * @note: This function only initialize timers 1, 2 and 3 because each timer can have
+ * up to 3 compare matchs, and MAX_NUMBER_OF_SERVOS = 9 (this number is not special, it can be changed),
+ *  so an extra timer would be useless */
+void servoConfig(void)
+{
+	TIMER_DRIVER_InitTimer(TIMER_1,TIMER_DRIVER_microsecondsToTicks(SERVO_COMPLETECYCLE_PERIOD),timer1CompareMatch0func);
+	TIMER_DRIVER_InitTimer(TIMER_2,TIMER_DRIVER_microsecondsToTicks(SERVO_COMPLETECYCLE_PERIOD),timer2CompareMatch0func);
+	TIMER_DRIVER_InitTimer(TIMER_3,TIMER_DRIVER_microsecondsToTicks(SERVO_COMPLETECYCLE_PERIOD),timer3CompareMatch0func);
+}
+
+
+/*@brief: adds servo (to a pin) to the the list
+ *@return: True if servo was successfully attached, False if not.
+ * */
+bool_t servoAttach( uint8_t pin)
+{
+	bool_t ret = FALSE;
+	uint8_t position = 0;
+
+	position = isServoAttached(pin);
+	if(position==0)
+	{
+		position = isServoAttached(EMPTY_POSITION); //Searches for the first empty position
+		if(position) //if position==0 => there is no room in the list for another servo
+		{
+			AttachedServoList[position-1].pin = pin;
+			/* Enables the compare match interrupt */
+			TIMER_DRIVER_EnableCompareMatchOnTimer(	AttachedServoList[position-1].associatedTimer, //Timer number
+													AttachedServoList[position-1].associatedCompareMatch, //Compare match number
+													TIMER_DRIVER_microsecondsToTicks(angleToMicroseconds(AttachedServoList[position-1].angle)), //Ticks
+													AttachedServoList[position-1].associatedFunction); //void function pointer
+			ret = TRUE;
+		}
+	}
+
+	return ret;
+}
+
+
+/*TODO: TO BE IMPLEMENTED*/
+bool_t servoAttachWithConfig( uint8_t pin, servoConfig_t * servoConfig )
+{
+	return TRUE;
+}
+
+
+/*
+ * @return: position (1 ~ MAX_NUMBER_OF_SERVOS), 0 if the element was not found.
+ * */
+uint8_t isServoAttached( uint8_t pin )
+{
+	uint8_t position = 0, ret = 0;
+	while ( (position < MAX_NUMBER_OF_SERVOS) && (pin != AttachedServoList[position].pin) ) {
+		position++;
+	}
+
+	if (position < MAX_NUMBER_OF_SERVOS)
+	{
+		ret = position + 1;
+	}
+	else
+	{
+		ret = 0;
+	}
+
+	return ret;
+}
+
+/*@brief: removes servo (attached to pin) from the list
+ *@return: True if servo was successfully detached, False if not.
+ * */
+bool_t servoDetach( uint8_t pin )
+{
+	bool_t ret = FALSE;
+	uint8_t position = 0;
+
+	position = isServoAttached(pin);
+
+	if(position)
+	{
+		AttachedServoList[position-1].pin = EMPTY_POSITION;
+		AttachedServoList[position-1].angle = 0;
+		TIMER_DRIVER_DisableCompareMatchOnTimer(AttachedServoList[position-1].associatedTimer,	//Timer number
+												AttachedServoList[position-1].associatedCompareMatch); //Compare match number
+		ret = TRUE;
+	}
+	return ret;
+}
+
+/*@brief: change the angle of the servo at the selected pin
+ *@return: True if the angle was successfully changed, False if not.
+ * */
+bool_t servoWrite( uint8_t pin, uint8_t angle )
+{
+	bool_t ret = FALSE;
+	uint8_t position = 0;
+
+	position = isServoAttached(pin);
+
+	if(position)
+	{
+		AttachedServoList[position-1].angle = angle;
+		ret = TRUE;
+	}
+
+	return ret;
+}
+
+/*@brief: read the angle of the servo in the pin
+ *@return: angle of the servo in the pin (0 ~ 180). If error => return = EMPTY_POSITION (255)
+ * */
+uint8_t servoRead( uint8_t pin )
+{
+	uint8_t position = 0, ret = 0;
+	position = isServoAttached(pin);
+
+	if(position)
+	{
+		ret = AttachedServoList[position-1].angle;
+	}
+	else
+	{
+		ret = EMPTY_POSITION;
+	}
+
+	return ret;
+}
+
+
+/*==================[end of file]============================================*/
